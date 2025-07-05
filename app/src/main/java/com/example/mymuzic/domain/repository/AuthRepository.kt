@@ -1,11 +1,11 @@
 package com.example.mymuzic.domain.repository
 
-import com.example.mymuzic.data.model.AuthState
-import com.example.mymuzic.data.model.SpotifyTokenResponse
-import com.example.mymuzic.data.model.SpotifyUserProfile
-import com.example.mymuzic.data.model.RecentlyPlayedItem
-import com.example.mymuzic.data.model.SpotifyArtist
-import com.example.mymuzic.data.model.SpotifyTrack
+import com.example.mymuzic.data.model.auth.AuthState
+import com.example.mymuzic.data.model.auth.SpotifyTokenResponse
+import com.example.mymuzic.data.model.auth.SpotifyUserProfile
+import com.example.mymuzic.data.model.response.RecentlyPlayedItem
+import com.example.mymuzic.data.model.music.SpotifyArtist
+import com.example.mymuzic.data.model.music.SpotifyTrack
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
@@ -20,5 +20,6 @@ interface AuthRepository {
     suspend fun getRecentlyPlayedTracks(limit: Int = 10): Result<List<RecentlyPlayedItem>>
     suspend fun getTopTracks(timeRange: String = "short_term", limit: Int = 10): Result<List<SpotifyTrack>>
     suspend fun getArtistsByIds(ids: List<String>): Result<List<SpotifyArtist>>
+    suspend fun getTrackDetail(id: String): Result<SpotifyTrack>
 
 } 

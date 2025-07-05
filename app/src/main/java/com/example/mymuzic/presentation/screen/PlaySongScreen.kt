@@ -1,5 +1,9 @@
 package com.example.mymuzic.presentation.screen
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -11,11 +15,14 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -27,32 +34,151 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
-import com.example.mymuzic.data.model.SpotifyAlbum
-import com.example.mymuzic.data.model.SpotifyArtist
-import com.example.mymuzic.data.model.SpotifyImage
-import com.example.mymuzic.data.model.SpotifyTrack
+import com.example.mymuzic.R
+import com.example.mymuzic.data.model.music.SpotifyAlbum
+import com.example.mymuzic.data.model.music.SpotifyArtist
+import com.example.mymuzic.data.model.music.SpotifyImage
+import com.example.mymuzic.data.model.music.SpotifyTrack
+import org.koin.androidx.compose.koinViewModel
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.ui.draw.scale
 
 @Composable
 fun PlaySongScreen(
+    navController: NavController,
+    id: String,
+    name: String,
+    imageUrl: String,
+    artist: String,
+    durationMs: Int = 0,
+    viewModel: PlaySongViewModel = koinViewModel()
+) {
+    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+    val isConnected by viewModel.isConnected.collectAsState()
+    
+    // Lấy AuthViewModel để cập nhật current playing track
+    val authViewModel: AuthViewModel = koinViewModel()
+
+    var isPlaying by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+    var isFavorite by remember { mutableStateOf(false) }
+    var lyrics by remember { mutableStateOf<String?>(null) }
+
+    // --- Tự động connect/disconnect Spotify Remote ---
+//    LaunchedEffect(Unit) {
+//        viewModel.connectSpotify()
+//    }
+//    DisposableEffect(Unit) {
+//        onDispose {
+//            viewModel.disconnectSpotify()
+//        }
+//    }
+
+    LaunchedEffect(id) {
+        viewModel.handleEvent(PlaySongEvent.FetchTrackDetail(id))
+    }
+
+    val displayTrack = uiState.spotifyTrack ?: SpotifyTrack(
+        id = id,
+        name = name,
+        album = SpotifyAlbum(id = "", name = "", images = listOf(SpotifyImage(imageUrl, 0, 0))),
+        artists = listOf(SpotifyArtist(id = "", name = artist)),
+        duration_ms = durationMs,
+        external_urls = mapOf(),
+        uri = "",
+        preview_url = null,
+        explicit = false,
+        popularity = 0,
+        is_playable = true,
+        track_number = 1
+    )
+
+    // --- Tích hợp Spotify Remote ---
+    fun handlePlayPause() {
+        Log.d("PlaySongScreen", "Nút Play/Pause được nhấn")
+        if (!isPlaying) {
+            displayTrack.uri.takeIf { it.isNotBlank() }?.let {
+                Log.d("PlaySongScreen", "Gọi playTrack với uri: $it")
+                viewModel.playTrack(it)
+            }
+        }
+        isPlaying = !isPlaying
+        
+        // Cập nhật current playing track trong AuthViewModel
+        authViewModel.handleEvent(AuthEvent.UpdateCurrentPlayingTrack(displayTrack, isPlaying))
+    }
+
+    PlaySongContent(
+        track = displayTrack,
+        isPlaying = isPlaying,
+        progress = progress,
+        onPlayPause = { handlePlayPause() },
+        onNext = {},
+        onPrev = {},
+        onSeek = { value -> progress = value },
+        onToggleFavorite = { isFavorite = !isFavorite },
+        isFavorite = isFavorite,
+        lyrics = lyrics,
+        onDownload = {},
+        onShare = {},
+        onBackClick = navController::popBackStack,
+        onSpotifyClick = {
+            // Cập nhật current playing track khi nhấn "Nghe trên Spotify"
+            authViewModel.handleEvent(AuthEvent.UpdateCurrentPlayingTrack(displayTrack, true))
+        },
+        context= context
+    )
+
+//    // Hiển thị trạng thái kết nối Spotify
+//    if (!isConnected) {
+//        Text(
+//            text = "Chưa kết nối Spotify App Remote",
+//            color = Color.Red,
+//            modifier = Modifier.padding(horizontal = 20.dp, vertical = 17.dp)
+//            modifier = Modifier.padding(horizontal = 20.dp, vertical = 17.dp)
+//        )
+//    }
+}
+
+@Composable
+fun PlaySongContent(
     track: SpotifyTrack,
     isPlaying: Boolean,
-    progress: Float, // 0f..1f
+    progress: Float,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit,
@@ -61,8 +187,16 @@ fun PlaySongScreen(
     isFavorite: Boolean,
     lyrics: String? = null,
     onDownload: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onBackClick: () -> Unit,
+    onSpotifyClick: () -> Unit,
+    context: Context
 ) {
+    val duration = track.duration_ms
+    val minutes = duration / 60000
+    val seconds = (duration % 60000) / 1000
+    val durationStr = if (duration > 0) "$minutes:${seconds.toString().padStart(2, '0')}" else "--:--"
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -71,6 +205,13 @@ fun PlaySongScreen(
     ) {
         Spacer(modifier = Modifier.height(32.dp))
         Row {
+            IconButton(onClick = onBackClick, modifier = Modifier.offset(x = -12.dp)) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
             Column {
                 Text(
                     text = "PLAYING FROM PLAYLIST:",
@@ -79,7 +220,7 @@ fun PlaySongScreen(
                     letterSpacing = 1.2.sp
                 )
                 Text(
-                    text = "Lofi Loft", // Có thể truyền động
+                    text = track.album.name,
                     color = Color.Cyan,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -89,42 +230,130 @@ fun PlaySongScreen(
             IconButton(onClick = onShare) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Share", tint = Color.White)
             }
-
         }
-
         Spacer(modifier = Modifier.height(16.dp))
         // Ảnh bìa
-        Image(
-            painter = rememberAsyncImagePainter(track.album.images?.firstOrNull()?.url),
-            contentDescription = track.name,
-            modifier = Modifier
+        Box {
+            Image(
+                painter = rememberAsyncImagePainter(track.album.images?.firstOrNull()?.url),
+                contentDescription = track.name,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Box(modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(16.dp)),
-            contentScale = ContentScale.Crop
-        )
+                .align(Alignment.BottomEnd)
+                .padding(5.dp)) {
+                var expanded by remember { mutableStateOf(false) }
+                val scale by animateFloatAsState(if (expanded) 1.1f else 1f)
+                Row(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Icon Spotify tròn
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(Color.White, shape = CircleShape)
+                            .scale(scale)
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.spotify),
+                            contentDescription = "Spotify",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = expanded,
+                        enter = fadeIn() + expandHorizontally(),
+                        exit = fadeOut() + shrinkHorizontally()
+                    ) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    data = Uri.parse("spotify:track:${track.id}")
+                                    putExtra(Intent.EXTRA_REFERRER, Uri.parse("android-app://" + context.packageName))
+                                }
+                                context.startActivity(intent)
+                                onSpotifyClick()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF1DB954),
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.spotify),
+                                contentDescription = null,
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Nghe trên Spotify")
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
-        // Tên bài hát & nghệ sĩ
-        Text(
-            text = track.name,
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
+        // Tên bài hát & nghệ sĩ & explicit
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = track.name,
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (track.explicit) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "E",
+                    color = Color.Red,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    modifier = Modifier
+                        .background(Color.White, shape = RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+        }
         Text(
             text = track.artists.joinToString(", ") { it.name },
             color = Color.Gray,
             fontSize = 16.sp
         )
         Spacer(modifier = Modifier.height(8.dp))
+        // Popularity
+//        if (track.popularity > 0) {
+//            Text(
+//                text = "Popularity: ${track.popularity}",
+//                color = Color.Yellow,
+//                fontSize = 14.sp
+//            )
+//        }
+
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // Nút share & favorite
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onShare) {
                 Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
             }
+            // Nút download
+            IconButton(onClick = onDownload) {
+                Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White)
+            }
+            Spacer(modifier = Modifier.weight(1f)) // <-- đúng nè
             IconButton(onClick = onToggleFavorite) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -148,7 +377,7 @@ fun PlaySongScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("0:00", color = Color.White, fontSize = 12.sp)
-            Text("2:43", color = Color.White, fontSize = 12.sp) // Có thể truyền động
+            Text(durationStr, color = Color.White, fontSize = 12.sp)
         }
         Spacer(modifier = Modifier.height(8.dp))
         // Nút điều khiển
@@ -165,6 +394,7 @@ fun PlaySongScreen(
             }
             IconButton(
                 onClick = onPlayPause,
+                //enabled = track.is_playable == true,
                 modifier = Modifier
                     .size(64.dp)
                     .background(Color.Cyan, shape = CircleShape)
@@ -184,10 +414,7 @@ fun PlaySongScreen(
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        // Nút download
-        IconButton(onClick = onDownload, modifier = Modifier.align(Alignment.End)) {
-            Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White)
-        }
+
         Spacer(modifier = Modifier.height(8.dp))
         // Lyrics
         if (!lyrics.isNullOrEmpty()) {
@@ -212,6 +439,7 @@ fun PlaySongScreen(
         }
     }
 }
+
 @Preview(showBackground = true)
 @Composable
 fun PlaySongScreenPreview() {
@@ -226,9 +454,14 @@ fun PlaySongScreenPreview() {
         artists = listOf(SpotifyArtist("1", "moody.")),
         duration_ms = 163000,
         external_urls = mapOf(),
-        uri = ""
+        uri = "",
+        preview_url = null,
+        explicit = false,
+        popularity = 0,
+        is_playable = true,
+        track_number = 1
     )
-    PlaySongScreen(
+    PlaySongContent(
         track = mockTrack,
         isPlaying = false,
         progress = 0.0f,
@@ -240,6 +473,9 @@ fun PlaySongScreenPreview() {
         isFavorite = false,
         lyrics = "You never look at the sky\nCause you think it's too high...",
         onDownload = {},
-        onShare = {}
+        onShare = {},
+        onBackClick = {},
+        onSpotifyClick = {},
+        context = LocalContext.current
     )
 }

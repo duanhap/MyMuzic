@@ -16,6 +16,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") } // For Spotify Auth library
+        flatDir {
+            dirs("app/libs")
+        }
     }
 }
 

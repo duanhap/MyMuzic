@@ -33,12 +33,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
-import com.example.mymuzic.data.model.SpotifyUserProfile
+import com.example.mymuzic.data.model.auth.SpotifyUserProfile
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
+
     navController: NavController,
     viewModel: AuthViewModel = koinViewModel()
 ) {

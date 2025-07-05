@@ -1,12 +1,12 @@
 package com.example.mymuzic.data.repository
 
 import com.example.mymuzic.data.local.AuthLocalDataSource
-import com.example.mymuzic.data.model.AuthState
-import com.example.mymuzic.data.model.RecentlyPlayedItem
-import com.example.mymuzic.data.model.SpotifyArtist
-import com.example.mymuzic.data.model.SpotifyTokenResponse
-import com.example.mymuzic.data.model.SpotifyTrack
-import com.example.mymuzic.data.model.SpotifyUserProfile
+import com.example.mymuzic.data.model.auth.AuthState
+import com.example.mymuzic.data.model.response.RecentlyPlayedItem
+import com.example.mymuzic.data.model.music.SpotifyArtist
+import com.example.mymuzic.data.model.auth.SpotifyTokenResponse
+import com.example.mymuzic.data.model.music.SpotifyTrack
+import com.example.mymuzic.data.model.auth.SpotifyUserProfile
 import com.example.mymuzic.data.remote.SpotifyAuthApi
 import com.example.mymuzic.domain.repository.AuthRepository
 import com.example.mymuzic.utils.PKCEUtils
@@ -169,6 +169,16 @@ class AuthRepositoryImpl(
             val idsParam = ids.joinToString(",")
             val response = authApi.getArtists("Bearer $accessToken", idsParam)
             Result.success(response.artists)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getTrackDetail(id: String): Result<SpotifyTrack> {
+        return try {
+            val accessToken = getValidAccessToken() ?: throw Exception("No valid access token")
+            val response = authApi.getTrackDetail("Bearer $accessToken", id)
+            Result.success(response)
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -1,11 +1,12 @@
 package com.example.mymuzic.data.remote
 
-import com.example.mymuzic.data.model.ArtistsResponse
-import com.example.mymuzic.data.model.SpotifyTokenResponse
-import com.example.mymuzic.data.model.SpotifyUserProfile
-import com.example.mymuzic.data.model.RecentlyPlayedResponse
-import com.example.mymuzic.data.model.SpotifyArtist
-import com.example.mymuzic.data.model.TopTracksResponse
+import com.example.mymuzic.data.model.response.ArtistsResponse
+import com.example.mymuzic.data.model.auth.SpotifyTokenResponse
+import com.example.mymuzic.data.model.auth.SpotifyUserProfile
+import com.example.mymuzic.data.model.response.RecentlyPlayedResponse
+import com.example.mymuzic.data.model.music.SpotifyArtist
+import com.example.mymuzic.data.model.music.SpotifyTrack
+import com.example.mymuzic.data.model.response.TopTracksResponse
 import retrofit2.http.*
 
 interface SpotifyAuthApi {
@@ -50,4 +51,9 @@ interface SpotifyAuthApi {
         @Header("Authorization") authHeader: String,
         @Query("ids") ids: String
     ): ArtistsResponse
+    @GET("v1/tracks/{id}")
+    suspend fun getTrackDetail(
+        @Header("Authorization") authHeader: String,
+        @Path("id") id: String
+    ): SpotifyTrack
 } 

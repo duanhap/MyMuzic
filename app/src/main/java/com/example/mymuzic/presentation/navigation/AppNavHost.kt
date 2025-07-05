@@ -5,16 +5,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.mymuzic.presentation.screen.SplashScreen
 import com.example.mymuzic.presentation.screen.WelcomeScreen
 import com.example.mymuzic.presentation.screen.LoginOptionsScreen
 import com.example.mymuzic.presentation.screen.LoginWithPasswordScreen
 import com.example.mymuzic.presentation.screen.AuthScreen
 import com.example.mymuzic.presentation.screen.AuthViewModel
-import com.example.mymuzic.presentation.screen.home.HomeScreen
+import com.example.mymuzic.presentation.screen.PlaySongScreen
+import com.example.mymuzic.presentation.screen.HomeScreen
 import com.example.mymuzic.presentation.screen.ProfileScreen
 import org.koin.androidx.compose.koinViewModel
 
@@ -105,6 +108,22 @@ fun AppNavHost(
         }
         composable(Routes.PROFILE) {
             ProfileScreen(navController)
+        }
+        composable(
+            "play_song/{id}?name={name}&imageUrl={imageUrl}&artist={artist}",
+            arguments = listOf(
+                navArgument("id") { type = NavType.StringType },
+                navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                navArgument("imageUrl") { type = NavType.StringType; defaultValue = "" },
+                navArgument("artist") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { backStackEntry ->
+            PlaySongScreen(navController,
+                id = backStackEntry.arguments?.getString("id") ?: "",
+                name = backStackEntry.arguments?.getString("name") ?: "",
+                imageUrl = backStackEntry.arguments?.getString("imageUrl") ?: "",
+                artist = backStackEntry.arguments?.getString("artist") ?: ""
+            )
         }
     }
 } 

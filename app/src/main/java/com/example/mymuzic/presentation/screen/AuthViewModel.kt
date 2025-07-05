@@ -3,13 +3,14 @@ package com.example.mymuzic.presentation.screen
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.mymuzic.data.model.AuthState
-import com.example.mymuzic.data.model.RecentlyPlayedItem
-import com.example.mymuzic.data.model.SpotifyArtist
-import com.example.mymuzic.data.model.SpotifyTokenResponse
-import com.example.mymuzic.data.model.SpotifyTrack
-import com.example.mymuzic.data.model.SpotifyUserProfile
-import com.example.mymuzic.domain.usecase.*
+import com.example.mymuzic.data.model.auth.AuthState
+import com.example.mymuzic.data.model.response.RecentlyPlayedItem
+import com.example.mymuzic.data.model.music.SpotifyArtist
+import com.example.mymuzic.data.model.auth.SpotifyTokenResponse
+import com.example.mymuzic.data.model.music.SpotifyTrack
+import com.example.mymuzic.data.model.auth.SpotifyUserProfile
+import com.example.mymuzic.domain.usecase.auth.*
+import com.example.mymuzic.domain.usecase.music.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +24,9 @@ data class AuthUiState(
     val topTracks: List<SpotifyTrack> = emptyList(),
     val recentArtists: List<SpotifyArtist> = emptyList(),
     val error: String? = null,
-    val authUrl: String? = null
+    val authUrl: String? = null,
+    val currentPlayingTrack: SpotifyTrack? = null,
+    val isCurrentlyPlaying: Boolean = false
 )
 
 sealed class AuthEvent {
@@ -34,6 +37,8 @@ sealed class AuthEvent {
     object FetchRecentlyPlayed : AuthEvent()
     object FetchTopTracks : AuthEvent()
     object FetchRecentArtists : AuthEvent()
+    data class UpdateCurrentPlayingTrack(val track: SpotifyTrack, val isPlaying: Boolean) : AuthEvent()
+    object TogglePlayPause : AuthEvent()
 }
 
 class AuthViewModel(
@@ -64,6 +69,8 @@ class AuthViewModel(
             is AuthEvent.FetchRecentlyPlayed -> fetchRecentlyPlayed()
             is AuthEvent.FetchTopTracks -> fetchTopTracks()
             is AuthEvent.FetchRecentArtists -> fetchRecentArtists()
+            is AuthEvent.UpdateCurrentPlayingTrack -> updateCurrentPlayingTrack(event.track, event.isPlaying)
+            is AuthEvent.TogglePlayPause -> togglePlayPause()
         }
     }
     
@@ -203,6 +210,20 @@ class AuthViewModel(
         }
     }
 
+    private fun updateCurrentPlayingTrack(track: SpotifyTrack, isPlaying: Boolean) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                currentPlayingTrack = track,
+                isCurrentlyPlaying = isPlaying
+            )
+        }
+    }
 
-
+    private fun togglePlayPause() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isCurrentlyPlaying = !_uiState.value.isCurrentlyPlaying
+            )
+        }
+    }
 } 

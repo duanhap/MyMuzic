@@ -16,6 +16,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders += mapOf(
+            "redirectSchemeName" to "com.example.mymuzic",
+            "redirectHostName" to "callback"
+        )
     }
 
     buildTypes {
@@ -92,5 +96,22 @@ dependencies {
 
     //shimmer
     implementation ("com.google.accompanist:accompanist-placeholder-material3:0.34.0")
+    
+    // Spotify App Remote SDK
+    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
+   // implementation(files("libs/spotify-app-remote-protocol-1.0.0.aar"))
+    
+    // Spotify App Remote dependencies
+    implementation("com.spotify.android:auth:2.1.1")
+    // Note: Gson is already added above
+    
+    // For Spotify App Remote (additional dependencies)
+    implementation("androidx.browser:browser:1.7.0") // For OAuth flow
+    implementation("androidx.security:security-crypto:1.1.0-alpha06") // For secure token storage
+    //implementation("com.spotify.protocol:protocol:1.0.0")
+
+    //palette
+    implementation("androidx.palette:palette:1.0.0")
+
 
 }

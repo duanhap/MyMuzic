@@ -2,7 +2,7 @@ package com.example.mymuzic.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.example.mymuzic.data.model.SpotifyUserProfile
+import com.example.mymuzic.data.model.auth.SpotifyUserProfile
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

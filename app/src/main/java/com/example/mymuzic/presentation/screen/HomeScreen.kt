@@ -1,5 +1,8 @@
-package com.example.mymuzic.presentation.screen.home
+@file:Suppress("UNUSED_EXPRESSION")
 
+package com.example.mymuzic.presentation.screen
+
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,12 +38,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
-import com.example.mymuzic.presentation.screen.AuthViewModel
-import com.example.mymuzic.presentation.screen.AuthEvent
 import androidx.navigation.NavController
-import com.example.mymuzic.data.model.RecentlyPlayedItem
-import com.example.mymuzic.data.model.SpotifyArtist
-import com.example.mymuzic.data.model.SpotifyTrack
+import com.example.mymuzic.data.model.response.RecentlyPlayedItem
+import com.example.mymuzic.data.model.music.SpotifyArtist
+import com.example.mymuzic.data.model.music.SpotifyTrack
 import com.example.mymuzic.presentation.navigation.Routes
 import com.google.accompanist.placeholder.PlaceholderHighlight
 import com.google.accompanist.placeholder.material3.placeholder
@@ -89,12 +90,14 @@ fun HomeScreen(navController: NavController) {
         Spacer(modifier = Modifier.height(16.dp))
         ContinueListeningSection(
             playlists = uiState.recentlyPlayed,
-            isLoading = isLoading
+            isLoading = isLoading,
+            navController = navController
         )
         Spacer(modifier = Modifier.height(24.dp))
         TopMixesSection(
             mixes = uiState.topTracks,
-            isLoading = isLoading
+            isLoading = isLoading,
+            navController = navController
         )
         Spacer(modifier = Modifier.height(24.dp))
         RecentListeningSection(
@@ -211,7 +214,7 @@ fun HomeHeader(user: UserProfile, onAvatarClick: () -> Unit, isLoading: Boolean 
 }
 
 @Composable
-fun ContinueListeningSection(playlists: List<RecentlyPlayedItem>, isLoading: Boolean = false) {
+fun ContinueListeningSection(playlists: List<RecentlyPlayedItem>, isLoading: Boolean = false,navController: NavController) {
     Text(
         text = "Continue Listening",
         color = Color.White,
@@ -226,7 +229,11 @@ fun ContinueListeningSection(playlists: List<RecentlyPlayedItem>, isLoading: Boo
     } else {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(playlists) { item ->
-                PlaylistCard(item)
+                PlaylistCard(item){
+                    navController.navigate("play_song/${item.track.id}?name=${item.track.name}" +
+                            "&imageUrl=${item.track.album.images?.firstOrNull()?.url ?: ""}" +
+                            "&artist=${item.track.artists.joinToString(", ") { it.name }}")
+                }
             }
         }
     }
@@ -266,16 +273,21 @@ fun PlaylistCardShimmer() {
 }
 
 @Composable
-fun PlaylistCard(item: RecentlyPlayedItem) {
+fun PlaylistCard(item: RecentlyPlayedItem,onClick: () -> Unit) {
     val track = item.track
     val albumImage = track.album.images?.firstOrNull()?.url ?: ""
     val artistNames = track.artists.joinToString(", ") { it.name }
+    
     Column(
         modifier = Modifier
             .width(140.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF232326))
             .padding(8.dp)
+            .clickable { 
+                android.util.Log.d("Navigation", "PlaylistCard clicked!")
+                onClick()
+            }
     ) {
         Image(
             painter = rememberAsyncImagePainter(albumImage),
@@ -304,7 +316,7 @@ fun PlaylistCard(item: RecentlyPlayedItem) {
 }
 
 @Composable
-fun TopMixesSection(mixes: List<SpotifyTrack>,isLoading: Boolean = false) {
+fun TopMixesSection(mixes: List<SpotifyTrack>,isLoading: Boolean = false,navController: NavController) {
     Text(
         text = "Your Top Mixes",
         color = Color.White,
@@ -319,7 +331,13 @@ fun TopMixesSection(mixes: List<SpotifyTrack>,isLoading: Boolean = false) {
     } else {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             items(mixes) { mix ->
-                MixCard(mix)
+                MixCard(mix){
+                    navController.navigate(
+                        "play_song/${mix.id}?name=${mix.name}" +
+                                "&imageUrl=${mix.album.images?.firstOrNull()?.url ?: ""}" +
+                                "&artist=${mix.artists.joinToString(", ") { it.name }}"
+                    )
+                }
             }
         }
     }
@@ -327,7 +345,7 @@ fun TopMixesSection(mixes: List<SpotifyTrack>,isLoading: Boolean = false) {
 }
 
 @Composable
-fun MixCard(mix: SpotifyTrack) {
+fun MixCard(mix: SpotifyTrack, onClick: () -> Unit ) {
     val albumImage = mix.album.images?.firstOrNull()?.url ?: ""
     Box(
         modifier = Modifier
@@ -335,6 +353,7 @@ fun MixCard(mix: SpotifyTrack) {
             .height(180.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(Color.DarkGray)
+            .clickable( onClick = onClick)
     ) {
         Image(
             painter = rememberAsyncImagePainter(albumImage),
