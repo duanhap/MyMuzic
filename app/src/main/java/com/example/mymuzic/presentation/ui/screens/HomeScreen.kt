@@ -35,6 +35,7 @@ import com.example.mymuzic.R
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -43,9 +44,12 @@ import com.example.mymuzic.data.model.response.RecentlyPlayedItem
 import com.example.mymuzic.data.model.music.SpotifyArtist
 import com.example.mymuzic.data.model.music.SpotifyTrack
 import com.example.mymuzic.presentation.navigation.Routes
+import com.example.mymuzic.presentation.screen.MusicViewModel
+import com.example.mymuzic.presentation.screen.MusicEvent
 import com.google.accompanist.placeholder.PlaceholderHighlight
 import com.google.accompanist.placeholder.material3.placeholder
 import com.google.accompanist.placeholder.material3.shimmer
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
 
 
 // --- Data models ---
@@ -56,27 +60,41 @@ data class UserProfile(val name: String, val avatarUrl: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavController) {
-    val viewModel: AuthViewModel = koinViewModel()
-    val uiState by viewModel.uiState.collectAsState()
+fun HomeScreen(
+    navController: NavController,
+    musicViewModel: MusicViewModel,
+    modifier: Modifier = Modifier
+) {
+    val authViewModel: AuthViewModel = koinViewModel()
+    val authUiState by authViewModel.uiState.collectAsState()
+    val musicUiState by musicViewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     var showProfileSheet = remember { mutableStateOf(false) }
 
+    // Set status bar color
+    val systemUiController = rememberSystemUiController()
+    SideEffect {
+        systemUiController.setStatusBarColor(
+            color = Color(0xFF18181A),
+            darkIcons = false
+        )
+    }
+
     // Lấy thông tin user từ Spotify API
-    val userProfile = uiState.userProfile
+    val userProfile = authUiState.userProfile
     val displayName = userProfile?.displayName ?: "User"
     val avatarUrl = userProfile?.images?.firstOrNull()?.url ?: ""
-    val isLoading = userProfile == null || uiState.isLoading
+    val isLoading = userProfile == null || authUiState.isLoading || musicUiState.isLoading
 
     // Gọi fetchRecentlyPlayed khi HomeScreen được mở
     LaunchedEffect(Unit) {
-        viewModel.handleEvent(AuthEvent.FetchRecentlyPlayed)
-        viewModel.handleEvent(AuthEvent.FetchTopTracks)
-        viewModel.handleEvent(AuthEvent.FetchRecentArtists)
+        musicViewModel.handleEvent(MusicEvent.FetchRecentlyPlayed)
+        musicViewModel.handleEvent(MusicEvent.FetchTopTracks)
+        musicViewModel.handleEvent(MusicEvent.FetchRecentArtists)
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF18181A))
             .padding(horizontal = 16.dp)
@@ -89,20 +107,21 @@ fun HomeScreen(navController: NavController) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         ContinueListeningSection(
-            playlists = uiState.recentlyPlayed,
+            playlists = musicUiState.recentlyPlayed,
             isLoading = isLoading,
             navController = navController
         )
         Spacer(modifier = Modifier.height(24.dp))
         TopMixesSection(
-            mixes = uiState.topTracks,
+            mixes = musicUiState.topTracks,
             isLoading = isLoading,
             navController = navController
         )
         Spacer(modifier = Modifier.height(24.dp))
         RecentListeningSection(
-            artists = uiState.recentArtists,
-            isLoading = isLoading
+            artists = musicUiState.recentArtists,
+            isLoading = isLoading,
+            navController = navController
         )
     }
 
@@ -140,9 +159,9 @@ fun HomeScreen(navController: NavController) {
                 Button(
                     onClick = {
                         coroutineScope.launch {
-                            viewModel.handleEvent(AuthEvent.Logout)
-                            showProfileSheet.value = false
-                        }
+                        authViewModel.handleEvent(AuthEvent.Logout)
+                        showProfileSheet.value = false
+                    }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954), contentColor = Color.White),
                     modifier = Modifier.fillMaxWidth()
@@ -231,7 +250,7 @@ fun ContinueListeningSection(playlists: List<RecentlyPlayedItem>, isLoading: Boo
             items(playlists) { item ->
                 PlaylistCard(item){
                     navController.navigate("play_song/${item.track.id}?name=${item.track.name}" +
-                            "&imageUrl=${item.track.album.images?.firstOrNull()?.url ?: ""}" +
+                            "&imageUrl=${item.track.album?.images?.firstOrNull()?.url ?: ""}" +
                             "&artist=${item.track.artists.joinToString(", ") { it.name }}")
                 }
             }
@@ -275,7 +294,7 @@ fun PlaylistCardShimmer() {
 @Composable
 fun PlaylistCard(item: RecentlyPlayedItem,onClick: () -> Unit) {
     val track = item.track
-    val albumImage = track.album.images?.firstOrNull()?.url ?: ""
+                val albumImage = track.album?.images?.firstOrNull()?.url ?: ""
     val artistNames = track.artists.joinToString(", ") { it.name }
     
     Column(
@@ -334,7 +353,7 @@ fun TopMixesSection(mixes: List<SpotifyTrack>,isLoading: Boolean = false,navCont
                 MixCard(mix){
                     navController.navigate(
                         "play_song/${mix.id}?name=${mix.name}" +
-                                "&imageUrl=${mix.album.images?.firstOrNull()?.url ?: ""}" +
+                                "&imageUrl=${mix.album?.images?.firstOrNull()?.url ?: ""}" +
                                 "&artist=${mix.artists.joinToString(", ") { it.name }}"
                     )
                 }
@@ -346,7 +365,7 @@ fun TopMixesSection(mixes: List<SpotifyTrack>,isLoading: Boolean = false,navCont
 
 @Composable
 fun MixCard(mix: SpotifyTrack, onClick: () -> Unit ) {
-    val albumImage = mix.album.images?.firstOrNull()?.url ?: ""
+    val albumImage = mix.album?.images?.firstOrNull()?.url ?: ""
     Box(
         modifier = Modifier
             .width(160.dp)
@@ -357,7 +376,7 @@ fun MixCard(mix: SpotifyTrack, onClick: () -> Unit ) {
     ) {
         Image(
             painter = rememberAsyncImagePainter(albumImage),
-            contentDescription = mix.album.name,
+            contentDescription = mix.album?.name,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
@@ -369,7 +388,7 @@ fun MixCard(mix: SpotifyTrack, onClick: () -> Unit ) {
                 .fillMaxWidth()
         ) {
             Text(
-                text = mix.album.name,
+                text = mix.album?.name ?:"",
                 color = Color.White,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
@@ -414,7 +433,7 @@ fun MixCardShimmer() {
 
 
 @Composable
-fun RecentListeningSection(artists: List<SpotifyArtist> ,isLoading: Boolean) {
+fun RecentListeningSection(artists: List<SpotifyArtist> ,isLoading: Boolean, navController: NavController) {
     Text(
         text = "Based on your recent listening",
         color = Color.White,
@@ -429,7 +448,7 @@ fun RecentListeningSection(artists: List<SpotifyArtist> ,isLoading: Boolean) {
     } else {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             items(artists) { artist ->
-                ArtistItem(artist)
+                ArtistItem(artist, navController)
             }
         }
     }
@@ -437,19 +456,22 @@ fun RecentListeningSection(artists: List<SpotifyArtist> ,isLoading: Boolean) {
 }
 
 @Composable
-fun ArtistItem(artist: SpotifyArtist) {
+fun ArtistItem(artist: SpotifyArtist, navController: NavController) {
     val albumImage = artist.images?.firstOrNull()?.url ?: ""
     Column(
         modifier = Modifier
-            .width(100.dp)
-            .padding(8.dp),
+            .width(120.dp)
+            .padding(8.dp)
+            .clickable {
+                navController.navigate("artist/${artist.id}")
+            },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
             painter = rememberAsyncImagePainter(albumImage),
             contentDescription = artist.name,
             modifier = Modifier
-                .size(90.dp)
+                .size(110.dp)
                 .clip(CircleShape),
             contentScale = ContentScale.Crop
         )

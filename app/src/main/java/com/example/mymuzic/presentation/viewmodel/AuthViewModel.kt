@@ -20,13 +20,8 @@ data class AuthUiState(
     val isLoading: Boolean = false,
     val isAuthenticated: Boolean = false,
     val userProfile: SpotifyUserProfile? = null,
-    val recentlyPlayed: List<RecentlyPlayedItem> = emptyList(),
-    val topTracks: List<SpotifyTrack> = emptyList(),
-    val recentArtists: List<SpotifyArtist> = emptyList(),
     val error: String? = null,
-    val authUrl: String? = null,
-    val currentPlayingTrack: SpotifyTrack? = null,
-    val isCurrentlyPlaying: Boolean = false
+    val authUrl: String? = null
 )
 
 sealed class AuthEvent {
@@ -34,11 +29,6 @@ sealed class AuthEvent {
     data class HandleAuthCallback(val uri: String) : AuthEvent()
     object Logout : AuthEvent()
     object CheckAuthState : AuthEvent()
-    object FetchRecentlyPlayed : AuthEvent()
-    object FetchTopTracks : AuthEvent()
-    object FetchRecentArtists : AuthEvent()
-    data class UpdateCurrentPlayingTrack(val track: SpotifyTrack, val isPlaying: Boolean) : AuthEvent()
-    object TogglePlayPause : AuthEvent()
 }
 
 class AuthViewModel(
@@ -47,10 +37,7 @@ class AuthViewModel(
     private val getUserProfileUseCase: GetUserProfileUseCase,
     private val isAuthenticatedUseCase: IsAuthenticatedUseCase,
     private val logoutUseCase: LogoutUseCase,
-    private val getAuthStateUseCase: GetAuthStateUseCase,
-    private val getRecentlyPlayedTracksUseCase: GetRecentlyPlayedTracksUseCase,
-    private val getTopTracksUseCase: GetTopTracksUseCase,
-    private val getArtistsByIdsUseCase: GetArtistsByIdsUseCase
+    private val getAuthStateUseCase: GetAuthStateUseCase
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -66,11 +53,6 @@ class AuthViewModel(
             is AuthEvent.HandleAuthCallback -> handleAuthCallback(event.uri)
             is AuthEvent.Logout -> logout()
             is AuthEvent.CheckAuthState -> checkAuthState()
-            is AuthEvent.FetchRecentlyPlayed -> fetchRecentlyPlayed()
-            is AuthEvent.FetchTopTracks -> fetchTopTracks()
-            is AuthEvent.FetchRecentArtists -> fetchRecentArtists()
-            is AuthEvent.UpdateCurrentPlayingTrack -> updateCurrentPlayingTrack(event.track, event.isPlaying)
-            is AuthEvent.TogglePlayPause -> togglePlayPause()
         }
     }
     
@@ -167,63 +149,6 @@ class AuthViewModel(
             } catch (e: Exception) {
                 // Ignore errors when checking auth state
             }
-        }
-    }
-    
-    private fun fetchRecentlyPlayed(limit: Int = 10) {
-        viewModelScope.launch {
-            try {
-                val result = getRecentlyPlayedTracksUseCase(limit)
-                if (result.isSuccess) {
-                    _uiState.value = _uiState.value.copy(recentlyPlayed = result.getOrNull() ?: emptyList())
-                }
-            } catch (_: Exception) {}
-        }
-    }
-    private fun fetchTopTracks(timeRange: String = "short_term", limit: Int = 10) {
-        viewModelScope.launch {
-            try {
-                val result = getTopTracksUseCase.invoke(timeRange, limit)
-                if (result.isSuccess) {
-                    _uiState.value = _uiState.value.copy(topTracks = result.getOrNull() ?: emptyList())
-                }
-            } catch (_: Exception){
-            }
-        }
-    }
-    private fun fetchRecentArtists() {
-        viewModelScope.launch {
-            try {
-                val recentlyPlayed = getRecentlyPlayedTracksUseCase(20).getOrNull() ?: emptyList()
-                val artistIds = recentlyPlayed
-                    .flatMap { it.track.artists }
-                    .map { it.id }
-                    .distinct()
-                    .take(10)
-                val artistsResult = getArtistsByIdsUseCase(artistIds)
-                if (artistsResult.isSuccess) {
-                    _uiState.value = _uiState.value.copy(recentArtists = artistsResult.getOrNull() ?: emptyList())
-                }
-            } catch (e: Exception) {
-                Log.e("AuthViewModel", "fetchRecentArtists error", e)
-            }
-        }
-    }
-
-    private fun updateCurrentPlayingTrack(track: SpotifyTrack, isPlaying: Boolean) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                currentPlayingTrack = track,
-                isCurrentlyPlaying = isPlaying
-            )
-        }
-    }
-
-    private fun togglePlayPause() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isCurrentlyPlaying = !_uiState.value.isCurrentlyPlaying
-            )
         }
     }
 } 

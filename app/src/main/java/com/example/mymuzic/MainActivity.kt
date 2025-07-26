@@ -15,12 +15,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.mymuzic.ui.theme.MyMuzicTheme
@@ -30,6 +32,7 @@ import com.example.mymuzic.presentation.screen.BottomNavBar
 import com.example.mymuzic.presentation.navigation.Routes
 import com.example.mymuzic.presentation.screen.AuthViewModel
 import com.example.mymuzic.presentation.screen.AuthEvent
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : ComponentActivity() {
@@ -45,29 +48,16 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
         
         setContent {
+
             MyMuzicTheme {
                 val navController = rememberNavController()
-                val navBackStackEntry = navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry.value?.destination?.route
-                val showBottomNav = currentRoute in listOf(
-                    Routes.HOME, Routes.EXPLORE, Routes.LIBRARY
-                )
                 
                 // Xử lý deep link callback
                 LaunchedEffect(Unit) {
                     // Đây sẽ được xử lý khi có deep link
                 }
                 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    bottomBar = {
-                        if (showBottomNav) {
-                            BottomNavBar(navController = navController, currentRoute = currentRoute)
-                        }
-                    }
-                ) { innerPadding ->
-                    AppNavHost(navController = navController, authViewModel = authViewModel)
-                }
+                AppNavHost(navController = navController, authViewModel = authViewModel)
             }
         }
     }

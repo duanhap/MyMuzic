@@ -1,5 +1,7 @@
 package com.example.mymuzic.presentation.screen
 
+import android.graphics.drawable.BitmapDrawable
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,11 +34,12 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.example.mymuzic.data.model.response.RecentlyPlayedItem
-import org.koin.androidx.compose.koinViewModel
 import androidx.palette.graphics.Palette
 import com.example.mymuzic.data.model.music.SpotifyTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.example.mymuzic.presentation.screen.MusicViewModel
+import com.example.mymuzic.presentation.screen.MusicEvent
 
 sealed class BottomNavItem(val route: String, val icon: ImageVector, val label: String) {
     object Home : BottomNavItem("home", Icons.Filled.Home, "Home")
@@ -51,15 +54,34 @@ val bottomNavItems = listOf(
 )
 
 @Composable
-fun BottomNavBar(navController: NavController, currentRoute: String?) {
-    val viewModel: AuthViewModel = koinViewModel()
-    val uiState by viewModel.uiState.collectAsState()
-    val recentlyPlayed = uiState.recentlyPlayed
-    val currentPlayingTrack = uiState.currentPlayingTrack
+fun BottomNavBar(
+    navController: NavController, 
+    currentRoute: String?,
+    musicViewModel: MusicViewModel
+) {
+    val musicUiState by musicViewModel.uiState.collectAsState()
+    val recentlyPlayed = musicUiState.recentlyPlayed
+    val currentPlayingTrack = musicUiState.currentPlayingTrack
+    
+    // Debug log để kiểm tra instance
+    LaunchedEffect(Unit) {
+        Log.d("BottomNavBar", "=== BottomNavBar được khởi tạo ===")
+        Log.d("BottomNavBar", "MusicViewModel instance hash: ${musicViewModel.hashCode()}")
+        Log.d("BottomNavBar", "Current playing track: ${currentPlayingTrack?.name}")
+        Log.d("BottomNavBar", "Is currently playing: ${musicUiState.isCurrentlyPlaying}")
+    }
     
     // Fetch recently played data
     LaunchedEffect(Unit) {
-        viewModel.handleEvent(AuthEvent.FetchRecentlyPlayed)
+        musicViewModel.handleEvent(MusicEvent.FetchRecentlyPlayed)
+    }
+    
+    // Debug log khi state thay đổi
+    LaunchedEffect(currentPlayingTrack, musicUiState.isCurrentlyPlaying) {
+        Log.d("BottomNavBar", "=== State thay đổi trong BottomNavBar ===")
+        Log.d("BottomNavBar", "Current playing track: ${currentPlayingTrack?.name}")
+        Log.d("BottomNavBar", "Is currently playing: ${musicUiState.isCurrentlyPlaying}")
+        Log.d("BottomNavBar", "MusicViewModel instance hash: ${musicViewModel.hashCode()}")
     }
     
     // Debug log
@@ -69,19 +91,65 @@ fun BottomNavBar(navController: NavController, currentRoute: String?) {
     Column {
         // Mini Player Bar - ưu tiên currentPlayingTrack, fallback về recentlyPlayed.first()
         val trackToShow = currentPlayingTrack ?: recentlyPlayed.firstOrNull()?.track
+        var dynamicGradient by remember { mutableStateOf<Brush?>(null) }
+        val context = LocalContext.current
         if (trackToShow != null) {
+            LaunchedEffect(trackToShow.album?.images?.firstOrNull()?.url) {
+                val imageUrl = trackToShow.album?.images?.firstOrNull()?.url
+                if (!imageUrl.isNullOrEmpty()) {
+                    try {
+                        val request = ImageRequest.Builder(context)
+                            .data(imageUrl)
+                            .allowHardware(false) // ⚠️ BẮT BUỘC để lấy bitmap
+                            .build()
+
+                        val result = coil.ImageLoader(context).execute(request)
+
+                        if (result is SuccessResult) {
+                            val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                            if (bitmap != null) {
+                                val palette = Palette.from(bitmap).generate()
+                                val dominantColor = palette.getDominantColor(Color(0xFF1E3A8A).toArgb())
+                                val vibrantColor = palette.getVibrantColor(dominantColor)
+                                val mutedColor = palette.getMutedColor(dominantColor)
+
+                                dynamicGradient = Brush.verticalGradient(
+                                    colors = listOf(
+                                        //Color(mutedColor).copy(alpha = 0.8f),
+                                        Color(dominantColor),
+                                        //Color(vibrantColor),
+                                        Color(mutedColor).copy(alpha = 0.8f)
+                                    )
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        dynamicGradient = Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF128693),
+                                Color(0xFF1CD5EA),
+                                Color(0xFF128693)
+                            )
+                        )
+                    }
+                }
+            }
+
             android.util.Log.d("BottomNavBar", "Showing MiniPlayerBar for: ${trackToShow.name}")
             MiniPlayerBar(
+                dynamicGradient = dynamicGradient,
                 track = trackToShow,
-                isPlaying = uiState.isCurrentlyPlaying,
+                isPlaying = musicUiState.isCurrentlyPlaying,
                 onPlayPauseClick = {
-                    viewModel.handleEvent(AuthEvent.TogglePlayPause)
+                    Log.d("BottomNavBar", "Play/Pause button được nhấn")
+                    musicViewModel.handleEvent(MusicEvent.TogglePlayPause)
                 },
                 navController = navController
             )
         } else {
             android.util.Log.d("BottomNavBar", "No track to show")
         }
+
         
         // Bottom Navigation
         NavigationBar(
@@ -125,73 +193,34 @@ fun BottomNavBar(navController: NavController, currentRoute: String?) {
 
 @Composable
 fun MiniPlayerBar(
+    dynamicGradient: Brush?,
     track: SpotifyTrack, 
     isPlaying: Boolean,
     onPlayPauseClick: () -> Unit,
     navController: NavController
 ) {
-    var dynamicGradient by remember { mutableStateOf<Brush?>(null) }
-    val context = LocalContext.current
-    
-    // Lấy màu động từ ảnh album
-    LaunchedEffect(track.album.images?.firstOrNull()?.url) {
-        val imageUrl = track.album.images?.firstOrNull()?.url
-        if (!imageUrl.isNullOrEmpty()) {
-            try {
-                // Sử dụng cách đơn giản hơn với Coil
-                val request = ImageRequest.Builder(context)
-                    .data(imageUrl)
-                    .build()
-                
-                val result = coil.ImageLoader(context).execute(request)
-                // Kiểm tra result có thành công không
-                if (result is SuccessResult || result.drawable != null) {
-                    val drawable = result.drawable
-                    if (drawable is android.graphics.drawable.BitmapDrawable) {
-                        val bitmap = drawable.bitmap
-                        val palette = Palette.from(bitmap).generate()
-                        val dominantColor = palette.getDominantColor(Color(0xFF1E3A8A).toArgb())
-                        val vibrantColor = palette.getVibrantColor(dominantColor)
-                        val mutedColor = palette.getMutedColor(dominantColor)
-                        
-                        dynamicGradient = Brush.verticalGradient(
-                            colors = listOf(
-                                Color(dominantColor),
-                                Color(vibrantColor),
-                                Color(mutedColor).copy(alpha = 0.8f)
-                            )
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                // Fallback to default gradient if error
-                dynamicGradient = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF128693),
-                        Color(0xFF1CD5EA),
-                        Color(0xFF128693)
-                    )
-                )
-            }
-        }
-    }
-    
+
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(
                 dynamicGradient ?: Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF128693),
-                        Color(0xFF1CD5EA),
-                        Color(0xFF128693)
+//                        Color(0xFF128693),
+//                        Color(0xFF1CD5EA),
+//                        Color(0xFF128693)
+                        Color(0xFF000000),
+                        Color(0xFF000000),
+                        Color(0xFF313131)
+
                     )
                 )
             )
             .clickable {
                 navController.navigate(
                     "play_song/${track.id}?name=${track.name}" +
-                            "&imageUrl=${track.album.images?.firstOrNull()?.url ?: ""}" +
+                            "&imageUrl=${track.album?.images?.firstOrNull()?.url ?: ""}" +
                             "&artist=${track.artists.joinToString(", ") { it.name }}"
                 )
             }
@@ -204,7 +233,7 @@ fun MiniPlayerBar(
         ) {
             // Album Image
             Image(
-                painter = rememberAsyncImagePainter(track.album.images?.firstOrNull()?.url),
+                painter = rememberAsyncImagePainter(track.album?.images?.firstOrNull()?.url),
                 contentDescription = track.name,
                 modifier = Modifier
                     .size(40.dp)
