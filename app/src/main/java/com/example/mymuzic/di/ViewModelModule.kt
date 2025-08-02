@@ -7,6 +7,7 @@ import com.example.mymuzic.presentation.screen.ArtistViewModel
 import com.example.mymuzic.presentation.screen.AlbumViewModel
 import com.example.mymuzic.presentation.screen.ExploreViewModel
 import com.example.mymuzic.presentation.viewmodel.CategoryPlaylistsViewModel
+import com.example.mymuzic.presentation.viewmodel.LibraryViewModel
 import com.example.mymuzic.presentation.viewmodel.PlaylistDetailViewModel
 import com.example.mymuzic.presentation.viewmodel.SearchViewModel
 import org.koin.androidx.viewmodel.dsl.viewModel
@@ -54,5 +55,6 @@ val ViewModelModule = module {
     viewModel { CategoryPlaylistsViewModel(get()) }
     viewModel { PlaylistDetailViewModel(get(), get()) }
     viewModel {SearchViewModel(get())}
+    viewModel{ LibraryViewModel(get()) }
 
 } 

@@ -71,7 +71,8 @@ fun MainScreen(
                 )
             }
             Routes.LIBRARY -> {
-                LibraryScreen(modifier = Modifier.padding(innerPadding))
+                LibraryScreen(
+                    navController = navController)
             }
             Routes.PROFILE -> {
                 ProfileScreen(navController)
