@@ -23,12 +23,6 @@ com.example.mymuzic/
 └── MyMuzicApp.kt          <- Composable root App + NavHost
 
 
-/////
-Client ID spotity
-c227a0aaa5d54c4881c1ad98e8dad3ec
-
-Client secret
-bad18f3d1fb2479e9a954a036f111af0
 
 
 //// cấu trúc app 
