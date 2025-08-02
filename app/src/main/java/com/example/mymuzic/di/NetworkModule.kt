@@ -13,8 +13,7 @@ import java.util.concurrent.TimeUnit
 val NetworkModule = module {
     single {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.NONE
-        }
+            level = HttpLoggingInterceptor.Level.NONE}
         OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)

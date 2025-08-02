@@ -2,6 +2,7 @@ package com.example.mymuzic.presentation.screen
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.Image
@@ -68,13 +69,23 @@ import com.example.mymuzic.data.model.music.SpotifyArtist
 import com.example.mymuzic.data.model.music.SpotifyImage
 import com.example.mymuzic.data.model.music.SpotifyTrack
 import org.koin.androidx.compose.koinViewModel
+import com.example.mymuzic.presentation.screen.MusicViewModel
+import com.example.mymuzic.presentation.screen.MusicEvent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.palette.graphics.Palette
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 
 @Composable
 fun PlaySongScreen(
@@ -84,29 +95,16 @@ fun PlaySongScreen(
     imageUrl: String,
     artist: String,
     durationMs: Int = 0,
-    viewModel: PlaySongViewModel = koinViewModel()
+    viewModel: PlaySongViewModel = koinViewModel(),
+    musicViewModel: MusicViewModel
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
-    
-    // Lấy AuthViewModel để cập nhật current playing track
-    val authViewModel: AuthViewModel = koinViewModel()
 
-    var isPlaying by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf(0f) }
+    val musicUiState by musicViewModel.uiState.collectAsState()
     var isFavorite by remember { mutableStateOf(false) }
     var lyrics by remember { mutableStateOf<String?>(null) }
-
-    // --- Tự động connect/disconnect Spotify Remote ---
-//    LaunchedEffect(Unit) {
-//        viewModel.connectSpotify()
-//    }
-//    DisposableEffect(Unit) {
-//        onDispose {
-//            viewModel.disconnectSpotify()
-//        }
-//    }
 
     LaunchedEffect(id) {
         viewModel.handleEvent(PlaySongEvent.FetchTrackDetail(id))
@@ -115,7 +113,19 @@ fun PlaySongScreen(
     val displayTrack = uiState.spotifyTrack ?: SpotifyTrack(
         id = id,
         name = name,
-        album = SpotifyAlbum(id = "", name = "", images = listOf(SpotifyImage(imageUrl, 0, 0))),
+        album = SpotifyAlbum(
+            id = "", 
+            name = "", 
+            images = listOf(SpotifyImage(imageUrl, 0, 0)),
+            albumType = null,
+            totalTracks = null,
+            releaseDate = null,
+            releaseDatePrecision = null,
+            artists = null,
+            externalUrls = null,
+            uri = null,
+            albumGroup = null
+        ),
         artists = listOf(SpotifyArtist(id = "", name = artist)),
         duration_ms = durationMs,
         external_urls = mapOf(),
@@ -127,25 +137,49 @@ fun PlaySongScreen(
         track_number = 1
     )
 
-    // --- Tích hợp Spotify Remote ---
+    // Sửa logic: chỉ bài nào là currentPlayingTrack mới hiển thị đúng trạng thái
+    val isCurrentTrack = musicUiState.currentPlayingTrack?.id == displayTrack.id
+    val isPlaying = isCurrentTrack && musicUiState.isCurrentlyPlaying
+
+    // Giả lập progress
+    val durationSec = (displayTrack.duration_ms / 1000f).coerceAtLeast(1f)
+    var progress by remember { mutableStateOf(0f) }
+
+    // Reset progress khi đổi bài
+    LaunchedEffect(displayTrack.id) {
+        progress = 0f
+    }
+    // Tăng progress khi đang phát và là current track
+    LaunchedEffect(isPlaying, isCurrentTrack) {
+        if (isPlaying && isCurrentTrack) {
+            while (progress < 1f) {
+                kotlinx.coroutines.delay(1000)
+                progress = (progress + 1f / durationSec).coerceAtMost(1f)
+            }
+        }
+    }
+
+    // Tính current time string
+    val currentTimeSec = (progress * durationSec).toInt()
+    val currentMinutes = currentTimeSec / 60
+    val currentSeconds = currentTimeSec % 60
+    val currentTimeStr = String.format("%d:%02d", currentMinutes, currentSeconds)
+
     fun handlePlayPause() {
-        Log.d("PlaySongScreen", "Nút Play/Pause được nhấn")
         if (!isPlaying) {
             displayTrack.uri.takeIf { it.isNotBlank() }?.let {
-                Log.d("PlaySongScreen", "Gọi playTrack với uri: $it")
                 viewModel.playTrack(it)
             }
         }
-        isPlaying = !isPlaying
-        
-        // Cập nhật current playing track trong AuthViewModel
-        authViewModel.handleEvent(AuthEvent.UpdateCurrentPlayingTrack(displayTrack, isPlaying))
+        // Cập nhật current playing track trong MusicViewModel
+        musicViewModel.handleEvent(MusicEvent.UpdateCurrentPlayingTrack(displayTrack, !isPlaying))
     }
 
     PlaySongContent(
         track = displayTrack,
         isPlaying = isPlaying,
         progress = progress,
+        currentTimeStr = currentTimeStr,
         onPlayPause = { handlePlayPause() },
         onNext = {},
         onPrev = {},
@@ -158,7 +192,7 @@ fun PlaySongScreen(
         onBackClick = navController::popBackStack,
         onSpotifyClick = {
             // Cập nhật current playing track khi nhấn "Nghe trên Spotify"
-            authViewModel.handleEvent(AuthEvent.UpdateCurrentPlayingTrack(displayTrack, true))
+            musicViewModel.handleEvent(MusicEvent.UpdateCurrentPlayingTrack(displayTrack, true))
         },
         context= context
     )
@@ -179,6 +213,7 @@ fun PlaySongContent(
     track: SpotifyTrack,
     isPlaying: Boolean,
     progress: Float,
+    currentTimeStr: String,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit,
@@ -196,11 +231,59 @@ fun PlaySongContent(
     val minutes = duration / 60000
     val seconds = (duration % 60000) / 1000
     val durationStr = if (duration > 0) "$minutes:${seconds.toString().padStart(2, '0')}" else "--:--"
+    var dynamicGradient by remember { mutableStateOf<Brush?>(null) }
+            if (track.album?.images?.firstOrNull()?.url != null) {
+            LaunchedEffect(track.album?.images?.firstOrNull()?.url) {
+                val imageUrl = track.album?.images?.firstOrNull()?.url
+            if (!imageUrl.isNullOrEmpty()) {
+                try {
+                    val request = ImageRequest.Builder(context)
+                        .data(imageUrl)
+                        .allowHardware(false) // ⚠️ BẮT BUỘC để lấy bitmap
+                        .build()
 
+                    val result = coil.ImageLoader(context).execute(request)
+
+                    if (result is SuccessResult) {
+                        val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                        if (bitmap != null) {
+                            val palette = Palette.from(bitmap).generate()
+                            val dominantColor = palette.getDominantColor(Color(0xFF1E3A8A).toArgb())
+                            val vibrantColor = palette.getVibrantColor(dominantColor)
+                            val mutedColor = palette.getMutedColor(dominantColor)
+
+                            dynamicGradient = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF000000),
+                                    Color(0xFF000000),
+                                    //Color(mutedColor).copy(alpha = 0.8f),
+//                                    Color(dominantColor),
+                                    Color(vibrantColor),
+   //                               Color(mutedColor).copy(alpha = 0.3f)
+                                )
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    dynamicGradient = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF128693),
+                            Color(0xFF1CD5EA),
+                            Color(0xFF128693)
+                        )
+                    )
+                }
+            }
+        }
+
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(
+                dynamicGradient ?: Brush.verticalGradient(
+                    colors = listOf(Color(0xFF000000),Color(0xFF727272))
+                ))
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(32.dp))
@@ -220,7 +303,7 @@ fun PlaySongContent(
                     letterSpacing = 1.2.sp
                 )
                 Text(
-                    text = track.album.name,
+                    text = track.album?.name ?: "",
                     color = Color.Cyan,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -235,7 +318,7 @@ fun PlaySongContent(
         // Ảnh bìa
         Box {
             Image(
-                painter = rememberAsyncImagePainter(track.album.images?.firstOrNull()?.url),
+                painter = rememberAsyncImagePainter(track.album?.images?.firstOrNull()?.url),
                 contentDescription = track.name,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -254,12 +337,23 @@ fun PlaySongContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Icon Spotify tròn
+                    val rotation by animateFloatAsState(
+                        targetValue = if (expanded) 180f else 0f,
+                        animationSpec = tween(
+                            durationMillis = 600, // thời gian xoay (ms)
+                            easing = FastOutSlowInEasing // chuyển động mượt
+                        )
+                    )
                     IconButton(
                         onClick = { expanded = !expanded },
                         modifier = Modifier
                             .size(48.dp)
                             .background(Color.White, shape = CircleShape)
                             .scale(scale)
+                            .graphicsLayer {
+                                rotationZ = rotation // Góc xoay theo trục Z
+                            }
+
                     ) {
                         Icon(
                             painter = painterResource(id = R.drawable.spotify),
@@ -376,7 +470,7 @@ fun PlaySongContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("0:00", color = Color.White, fontSize = 12.sp)
+            Text(currentTimeStr, color = Color.White, fontSize = 12.sp)
             Text(durationStr, color = Color.White, fontSize = 12.sp)
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -449,7 +543,15 @@ fun PlaySongScreenPreview() {
         album = SpotifyAlbum(
             id = "1",
             name = "Lofi Loft",
-            images = listOf(SpotifyImage("https://i.imgur.com/your_image.jpg", 300, 300))
+            images = listOf(SpotifyImage("https://i.imgur.com/your_image.jpg", 300, 300)),
+            albumType = null,
+            totalTracks = null,
+            releaseDate = null,
+            releaseDatePrecision = null,
+            artists = null,
+            externalUrls = null,
+            uri = null,
+            albumGroup = null
         ),
         artists = listOf(SpotifyArtist("1", "moody.")),
         duration_ms = 163000,
@@ -465,6 +567,7 @@ fun PlaySongScreenPreview() {
         track = mockTrack,
         isPlaying = false,
         progress = 0.0f,
+        currentTimeStr = "0:00",
         onPlayPause = {},
         onNext = {},
         onPrev = {},

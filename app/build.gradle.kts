@@ -97,6 +97,9 @@ dependencies {
     //shimmer
     implementation ("com.google.accompanist:accompanist-placeholder-material3:0.34.0")
     
+    // System UI Controller for status bar color
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.34.0")
+    
     // Spotify App Remote SDK
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
    // implementation(files("libs/spotify-app-remote-protocol-1.0.0.aar"))
