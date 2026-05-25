@@ -1,0 +1,190 @@
+data class MusicUiState(
+    val isLoadingRecentlyPlayed: Boolean = false,
+    val isLoadingTopTracks: Boolean = false,
+    val isLoadingRecentArtists: Boolean = false,
+    val recentlyPlayed: List<RecentlyPlayedItem> = emptyList(),
+    val topTracks: List<SpotifyTrack> = emptyList(),
+    val recentArtists: List<SpotifyArtist> = emptyList(),
+    val currentPlayingTrack: SpotifyTrack? = null,
+    val isCurrentlyPlaying: Boolean = false,
+    val recentlyPlayedError: String? = null,
+    val topTracksError: String? = null,
+    val recentArtistsError: String? = null
+)
+
+sealed class MusicEvent {
+    data class FetchRecentlyPlayed(val limit: Int = 10) : MusicEvent()
+    data class FetchTopTracks(val timeRange: String = "short_term", val limit: Int = 10) : MusicEvent()
+    data class FetchRecentArtists(val limit: Int = 20) : MusicEvent()
+    data class UpdateCurrentPlayingTrack(val track: SpotifyTrack, val isPlaying: Boolean) : MusicEvent()
+    object TogglePlayPause : MusicEvent()
+    object ClearErrors : MusicEvent()
+}
+
+class MusicViewModel(
+    private val getRecentlyPlayedTracksUseCase: GetRecentlyPlayedTracksUseCase,
+    private val getTopTracksUseCase: GetTopTracksUseCase,
+    private val getArtistsByIdsUseCase: GetArtistsByIdsUseCase
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(MusicUiState())
+    val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
+
+    // Job tracking để cancel previous requests
+    private var recentArtistsJob: Job? = null
+
+    fun handleEvent(event: MusicEvent) {
+        when (event) {
+            is MusicEvent.FetchRecentlyPlayed -> fetchRecentlyPlayed(event.limit)
+            is MusicEvent.FetchTopTracks -> fetchTopTracks(event.timeRange, event.limit)
+            is MusicEvent.FetchRecentArtists -> fetchRecentArtists(event.limit)
+            is MusicEvent.UpdateCurrentPlayingTrack -> updateCurrentPlayingTrack(event.track, event.isPlaying)
+            is MusicEvent.TogglePlayPause -> togglePlayPause()
+            is MusicEvent.ClearErrors -> clearErrors()
+        }
+    }
+
+    private fun fetchRecentlyPlayed(limit: Int) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingRecentlyPlayed = true, recentlyPlayedError = null) }
+
+            getRecentlyPlayedTracksUseCase(limit)
+                .onSuccess { tracks ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingRecentlyPlayed = false,
+                            recentlyPlayed = tracks ?: emptyList()
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingRecentlyPlayed = false,
+                            recentlyPlayedError = error.message ?: "Failed to fetch recently played"
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun fetchTopTracks(timeRange: String, limit: Int) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingTopTracks = true, topTracksError = null) }
+
+            getTopTracksUseCase(timeRange, limit)
+                .onSuccess { tracks ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingTopTracks = false,
+                            topTracks = tracks ?: emptyList()
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingTopTracks = false,
+                            topTracksError = error.message ?: "Failed to fetch top tracks"
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun fetchRecentArtists(limit: Int) {
+        // Cancel previous request nếu có
+        recentArtistsJob?.cancel()
+
+        recentArtistsJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingRecentArtists = true, recentArtistsError = null) }
+
+            try {
+                val recentlyPlayed = getRecentlyPlayedTracksUseCase(limit)
+                    .getOrElse { error ->
+                        _uiState.update {
+                            it.copy(
+                                isLoadingRecentArtists = false,
+                                recentArtistsError = error.message ?: "Failed to fetch recently played for artists"
+                            )
+                        }
+                        return@launch
+                    }
+
+                val artistIds = recentlyPlayed
+                    ?.flatMap { it.track.artists }
+                    ?.map { it.id }
+                    ?.distinct()
+                    ?.take(10) ?: emptyList()
+
+                if (artistIds.isEmpty()) {
+                    _uiState.update { it.copy(isLoadingRecentArtists = false, recentArtists = emptyList()) }
+                    return@launch
+                }
+
+                getArtistsByIdsUseCase(artistIds)
+                    .onSuccess { artists ->
+                        _uiState.update {
+                            it.copy(
+                                isLoadingRecentArtists = false,
+                                recentArtists = artists ?: emptyList()
+                            )
+                        }
+                    }
+                    .onFailure { error ->
+                        _uiState.update {
+                            it.copy(
+                                isLoadingRecentArtists = false,
+                                recentArtistsError = error.message ?: "Failed to fetch artists"
+                            )
+                        }
+                    }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingRecentArtists = false,
+                        recentArtistsError = e.message ?: "Failed to fetch artists"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun updateCurrentPlayingTrack(track: SpotifyTrack, isPlaying: Boolean) {
+        _uiState.update {
+            it.copy(
+                currentPlayingTrack = track,
+                isCurrentlyPlaying = isPlaying
+            )
+        }
+    }
+
+    private fun togglePlayPause() {
+        _uiState.update {
+            it.copy(isCurrentlyPlaying = !it.isCurrentlyPlaying)
+        }
+    }
+
+    private fun clearErrors() {
+        _uiState.update {
+            it.copy(
+                recentlyPlayedError = null,
+                topTracksError = null,
+                recentArtistsError = null
+            )
+        }
+    }
+}
+Multiple Loading States: Mỗi API có loading state riêng
+
+Multiple Error States: Lỗi được quản lý riêng cho từng API
+
+Parameterized Events: Cho phép truyền tham số từ bên ngoài
+
+Job Management: Cancel previous requests để tránh race conditions
+
+Extension Functions: Sử dụng onSuccess/onFailure cho cleaner code
+
+Update Function: Sử dụng update() cho atomic state changes
+
+Error Clearing: Thêm chức năng clear errors

@@ -517,3 +517,13 @@ fun ArtistItemShimmer() {
         )
     }
 }
+@Composable
+fun SquareButtonSizeBig(){
+    Box(modifier = Modifier
+        .size(163.dp)
+        .clip(CircleShape)) {
+        Box{
+
+        }
+    }
+}
